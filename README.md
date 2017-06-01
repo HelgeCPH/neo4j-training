@@ -38,15 +38,16 @@ python3 serve_playbooks.py
 ```
 
 
+![Neo4j Webclient Login Screenshot](docs/images/login_screen_small.png "Neo4j Webclient Login")
 
+
+
+![Play a Tutorial Screenshot](docs/images/start_play_small.png "Play a Tutorial")
+
+```
 :play http://localhost:8001/html/tutorial_example.html
+```
 
-
-![Alt text](docs/images/login_screen.png?raw=true "Title")
-
-
-
-
-
+![Show a Tutorial Screenshot](docs/images/show_tutorial_small.png "Show a Tutorial")
 
 
