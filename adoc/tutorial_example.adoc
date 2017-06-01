@@ -1,0 +1,181 @@
+= A Guide Cities and their Locations in Public Domain Books
+
+== Importing the Data
+
+image::http://www.gutenberg.org/pics/pg-logo-002.png[width=200,float=right]
+
+In this tutorial we will create a graph database with information about English ebooks from www.gutenberg.org[Project Gutenberg].
+
+We have a CSV file containing
+
+
+
+We have the following CSV files containing data:
+
+* `books.csv`, information about books on Project Gutenberg containing a `PG_ID`, a `TITILE`, a book's `LANGUAGE`, and a list of `AUTHORS` identifiers.
+* `authors.csv`, information about book authors containing an `AUTHOR_ID`, an authors `NAME` and `ALIAS`, years of birth and death (`BIRTHDATE`, `DEATHDATE`) and a link to a `WEBPAGE`.
+* `cities.csv`, identifiers and names of cities (`CITY_ID`, `UTF8_NAME`, `ASCII_NAME` and their geolocations (`LAT`, `LON`).
+* `books2authors.csv`,
+* `mentioned_city_ids.csv`,
+
+
+== Where does this information come from?
+
+The `cities.csv` file was generated with the help of the file http://download.geonames.org/export/dump/cities1000.zip at http://www.geonames.org[GeoNames] containing information about cities with more than 1000 inhabitants, see http://download.geonames.org/export/dump/ for more information.
+
+The information about the books (`books.csv`), authors (`authors.csv`), and their relations (`books2authors.csv`) was extracted out of Project Gutenberg's offline catalog. This is a set of http://www.gutenberg.org/cache/epub/feeds/rdf-files.tar.bz2[RDF] (XML) files with meta-data for all contents of Project Gutenberg, which might be text books, ebooks, audio books, etc.
+
+http://www.gutenberg.org/wiki/Gutenberg:Feeds
+
+
+== Importing the Books
+
+[source,cypher]
+----
+USING PERIODIC COMMIT 5000
+LOAD CSV WITH HEADERS FROM "https://bitbucket.org/HelgeCPH/project_gutenberg_data/raw/97d7b168751893d4ac4d748d83aa51c0532b4181/books.csv" AS row
+CREATE (:Book {pg_id: toInteger(row.PG_ID), title: row.TITLE, language: row.LANGUAGE})
+----
+
+
+See if we really have some books in the database now:
+
+[source,cypher]
+----
+MATCH (b:Book)
+WHERE b.title CONTAINS "Moby Dick"
+RETURN b;
+----
+
+== Importing the Authors
+
+[source,cypher]
+----
+USING PERIODIC COMMIT 5000
+LOAD CSV WITH HEADERS FROM "https://bitbucket.org/HelgeCPH/project_gutenberg_data/raw/97d7b168751893d4ac4d748d83aa51c0532b4181/authors.csv" AS row
+CREATE (:Author {author_id: toInteger(row.AUTHOR_ID), name: row.NAME, alias: row.ALIAS, birth: toInteger(row.BIRTHDATE), death: toInteger(row.DEATHDATE), webpage: row.WEBPAGE})
+----
+
+[source,cypher]
+----
+MATCH (a:Author {name: "Doyle, Arthur Conan"})
+RETURN a;
+----
+
+
+
+== Importing the Cities
+
+[source,cypher]
+----
+USING PERIODIC COMMIT 5000
+LOAD CSV WITH HEADERS FROM "https://bitbucket.org/HelgeCPH/project_gutenberg_data/raw/b3deb876b04338f947a706c9c5df2aa111b0efad/cities.csv" AS row
+CREATE (:City {geoname_id: toInteger(row.CITY_ID), name: row.ASCII_NAME, utf_name: row.UTF8_NAME, lat:toFloat(row.LAT), lon:toFloat(row.LON), country_code:row.C_CODE, population:toInteger(row.POPULATION), timezone:row.TIMEZONE})
+
+----
+
+CITY_ID,NAME,LAT,LON,C_CODE,POPULATION,TIMEZONE
+
+[source,cypher]
+----
+USING PERIODIC COMMIT 5000
+LOAD CSV WITH HEADERS FROM "https://bitbucket.org/HelgeCPH/project_gutenberg_data/raw/97d7b168751893d4ac4d748d83aa51c0532b4181/cities.csv" AS row
+CREATE (:City {geonameid: toInteger(row.CITY_ID), name: row.ASCII_NAME, utf_name: row.UTF8_NAME, lat:toFloat(row.LAT), lon:toFloat(row.LON), country_code:row.C_CODE, population:toInteger(row.POPULATION), timezone:row.TIMEZONE})
+----
+
+
+
+
+
+
+[source,cypher]
+----
+MATCH (c:City {name: "Copenhagen"})
+RETURN c
+----
+
+
+[source,cypher]
+----
+MATCH (c:City {name: "Berlin"})
+RETURN c
+----
+
+But be aware, that a city name is not a unique identifier. There are for example many Berlins in the world.
+
+
+
+== Importing the Relations
+
+Now we create the relations by importing the corresponding CSV files. However, before creating the relations, we will create constraints on the identifiers of books and authors, where the constraints say that the identifiers are unique
+
+
+[source,cypher]
+----
+CREATE CONSTRAINT ON (b:Book) ASSERT b.pg_id IS UNIQUE;
+----
+
+[source,cypher]
+----
+CREATE CONSTRAINT ON (a:Author) ASSERT a.author_id IS UNIQUE;
+----
+
+According to the Neo4j https://neo4j.com/docs/developer-manual/current/cypher/schema/constraints/[documentation]: __"Adding a unique property constraint on a property will also add a single-property index on that property, ..."__, which will speed up the creation of all the relations.
+
+
+First, let's create relations books and their authors.
+
+
+[source,cypher]
+----
+USING PERIODIC COMMIT 5000
+LOAD CSV WITH HEADERS FROM "https://bitbucket.org/HelgeCPH/project_gutenberg_data/raw/97d7b168751893d4ac4d748d83aa51c0532b4181/books2authors.csv" AS row
+MATCH (b:Book {pg_id: toInteger(row.PG_ID)})
+MATCH (a:Author {author_id: toInteger(row.AUTHOR_ID)})
+CREATE (b)-[:AUTHORED_BY]->(a)
+----
+
+Let's see the books that are written by Arthur Conan Doyle.
+
+[source,cypher]
+----
+MATCH (b:Book)-[:AUTHORED_BY]->(a:Author {name: "Doyle, Arthur Conan"})
+RETURN b,a;
+----
+
+== Importing the Relations to Mentioned Cities
+
+Second, we create the relations from a book to all the cities it mentions.
+
+[source,cypher]
+----
+CREATE CONSTRAINT ON (c:City) ASSERT c.geoname_id IS UNIQUE;
+----
+
+[source,cypher]
+----
+USING PERIODIC COMMIT 5000
+LOAD CSV WITH HEADERS FROM "https://bitbucket.org/HelgeCPH/project_gutenberg_data/raw/97d7b168751893d4ac4d748d83aa51c0532b4181/mentioned_city_ids.csv" AS row
+MATCH (b:Book {pg_id: toInteger(row.PG_ID)})
+MATCH (c:City {geoname_id: toInteger(row.CITY_ID)})
+MERGE (b)-[:MENTIONS]->(c)
+----
+
+*Note*: This will take a bit, on my computer it took ca. eight minutes as there are more than ten million relations to create.
+
+
+==
+
+[source,cypher]
+----
+MATCH (b:Book {pg_id: 1661, title:"The Adventures of Sherlock Holmes"})-[:MENTIONS]->(c:City)
+RETURN b,c;
+----
+
+
+
+[source,cypher]
+----
+MATCH (c:City)<-[:MENTIONS]-(b:Book {title:"The Adventures of Sherlock Holmes"})-[:AUTHORED_BY]->(a:Author {name: "Doyle, Arthur Conan"})
+RETURN a,b,c;
+----
