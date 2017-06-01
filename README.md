@@ -32,9 +32,21 @@ vagrant ssh
 suplemon /synced_folder/adoc/tutorial_example.adoc
 cd neo4j-guides/
 
-./run.sh /synced_folder/adoc/tutorial_example.adoc /synced_folder/html/tutorial_example.html
+./run.sh /synced_folder/adoc/tutorial_example.adoc html/tutorial_example.html
 
 python3 serve_playbooks.py
 ```
+
+
+
+:play http://localhost:8001/html/tutorial_example.html
+
+
+![Alt text](docs/images/login_screen.png?raw=true "Title")
+
+
+
+
+
 
 
